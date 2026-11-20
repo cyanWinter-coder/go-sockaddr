@@ -35,6 +35,11 @@ it possible to `sort`, `filter`, `limit`, seek (via the `offset` function), or
 `unique` the list.  To extract useful string information, the `attr` and `join`
 functions return a single string value.  See below for details.
 
+To render a template from a single, immutable view of the host instead of
+re-reading the interface, address, and route tables at each step, capture a
+snapshot with `sockaddr.CaptureIfSnapshot` and pass `snapshot.IfAddrs()` to
+`ParseIfAddrs` or `ParseIfAddrsTemplate`.
+
 Important note: see the
 https://github.com/hashicorp/go-sockaddr/tree/master/cmd/sockaddr utility for
 more examples and for a CLI utility to experiment with the template syntax.

@@ -53,6 +53,62 @@ IP address on the default interface, respectively.  Similarly, there is also a
 helper function called `GetInterfaceIP` which returns the first usable IP
 address on the named interface.
 
+### Immutable interface snapshots
+
+The `Get*Interfaces` helpers read the interface list, the address list, the
+flags, and the route table on every call.  If the host's interfaces change
+between two reads, a chain of `include`, `exclude`, and `sort` operations can
+observe a mixed view.  `CaptureIfSnapshot` avoids that by collecting everything
+once and returning an immutable snapshot:
+
+```go
+snapshot, err := sockaddr.CaptureIfSnapshot(ctx, sockaddr.IfSnapshotConfig{
+    DedupeAddresses: true,
+})
+if err != nil {
+    // No partial results are ever returned.  Errors wrap
+    // sockaddr.ErrSnapshotIncomplete and preserve context cancellation.
+    return err
+}
+
+// Every step below reads only the captured data; the host is not consulted
+// again, and concurrent reads are lock-free.
+selection, err := snapshot.Select().Include("type", "ip")
+if err != nil {
+    return err
+}
+if selection, err = selection.Exclude("flags", "loopback"); err != nil {
+    return err
+}
+selection, err = selection.Sort("default,type,-size")
+if err != nil {
+    return err
+}
+
+for _, entry := range selection.Entries() {
+    fmt.Println(entry.Key, entry.Family, entry.Address())
+}
+```
+
+Each result carries a stable `InterfaceKey` (derived from the interface name)
+and an `AddressFamily`.  `IfSnapshotConfig.DedupeAddresses` controls whether
+addresses that repeat across interfaces are collapsed; the default preserves
+the existing `GetAllInterfaces` behavior.
+
+Snapshots can be compared without rescanning the host:
+
+```go
+diff := after.DiffFrom(before) // before may be nil
+fmt.Println(diff.Added, diff.Removed, diff.Changed)
+```
+
+Snapshot-backed equivalents of the legacy views are available as
+`DefaultSelection`, `PrivateSelection`, and `PublicSelection`.  The existing
+`Get*Interfaces` functions and the `template` package entry points are
+unchanged, so templates and callers that do not need a stable view keep
+working as before.  `IfSnapshot.IfAddrs()` can be passed to
+`template.ParseIfAddrs` when a template should render from a captured view.
+
 ## `sockaddr` CLI
 
 Given the possible complexity of the `sockaddr` library, there is a CLI utility
